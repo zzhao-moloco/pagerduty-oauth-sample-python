@@ -1,5 +1,5 @@
 {
-    "PD_CLIENT_ID": "<YOUR_CLIENT_ID_HERE>",
-    "PD_CLIENT_SECRET": "<YOUR_CLIENT_SECRET_HERE>",
-    "REDIRECT_URI": "http://localhost:5000/callback"
+    "PD_CLIENT_ID": "d4ac43bc-777a-47c5-9f67-b7f3bf30c424",
+    "PD_CLIENT_SECRET": "JQFMvVriF8t72uhdWY0lC9V1gfUd2DQDciEqAMV8Dq8",
+    "REDIRECT_URI": "http://localhost:8000/callback"
 }
