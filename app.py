@@ -41,23 +41,6 @@ slack_service_id = "P3MFIRX"
 service_ids = [datadog_service_id, dsp_eng_oncall_service_id, jenkins_service_id, slack_service_id]
 include_names = ["acknowledgers", "assignees", "agents"]
 
-since_datetime = datetime(2023, 12, 16, 15, 0, 0)
-since_datetime_str = since_datetime.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-until_datetime = since_datetime + pd.Timedelta(days=1)
-until_datetime_str = until_datetime.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-incident_params = {
-    "statuses[]": "resolved",
-    "limit": 100,
-    "sort_by": "created_at:asc",
-    "since" : since_datetime_str,
-    "until" : until_datetime_str,
-    "include[]": include_names,
-    "service_ids[]": service_ids,
-}
-incident_params_query = urllib.parse.urlencode(incident_params, True)
-
 
 @app.route("/")
 def index():
@@ -124,52 +107,74 @@ def callback():
 def incidents():
     html = "<h1>Export incidents</h1>"
 
+    for day in [18, 17, 16, 15, 14, 13, 12]:
 
-    incident_url = "{url}/incidents?{query_string}".format(
-        url=base_incident_url, query_string=incident_params_query
-    )
-    try:
-        if "api_token" not in session:
-            session["api_token"] = fallback_api_token
-        api_token = session["api_token"]
+        hour = 15 # 7 PST 15 UTC
+        since_datetime = datetime(2023, 12, day, hour, 0, 0)
+        since_datetime_str = since_datetime.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        headers = {
-            "Accept": "application/vnd.pagerduty+json;version=2",
-            "Authorization": "Bearer " + api_token,
+        until_datetime = since_datetime + pd.Timedelta(hours=12)
+        until_datetime_str = until_datetime.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        incident_params = {
+            "statuses[]": "resolved",
+            "limit": 100,
+            "sort_by": "created_at:asc",
+            "since" : since_datetime_str,
+            "until" : until_datetime_str,
+            "include[]": include_names,
+            "service_ids[]": service_ids,
         }
-        incident_res = requests.get(incident_url, headers=headers)
-        incident_res.raise_for_status()
-        incident_body = incident_res.json()
-        html+= "<div>\
-            <div>total:{total}</div>\
-            <div>more:{more}</div>\
-            <div>offset:{offset}</div>\
-            <div>limit:{limit}</div>\
-                </div>".format(
-            total=incident_body["total"],
-            more=incident_body["more"],
-            offset=incident_body["offset"],
-            limit=incident_body["limit"],
-            )
+        incident_params_query = urllib.parse.urlencode(incident_params, True)
 
-        # download the incidents as excel file
-        incidents_df = pd.json_normalize(incident_body["incidents"])
-        # transform
-        selected_columns = ["created_at", "title", "html_url", "status", "updated_at",  "resolved_at", "service.summary", "last_status_change_by.summary"]
-        for col_name in include_names:
-            if col_name in incidents_df.columns:
-                selected_columns.append(col_name)
-        
-        thin_df = incidents_df[selected_columns]
-        thin_df['title'] = '<a href=' + thin_df['html_url'] + '><div>' + thin_df['title'] + '</div></a>'
-        thin_df['html_url'] = '<a href=' + thin_df['html_url'] + '><div>' + thin_df['html_url'] + '</div></a>'
+        incident_url = "{url}/incidents?{query_string}".format(
+            url=base_incident_url, query_string=incident_params_query
+        )
+        try:
+            if "api_token" not in session:
+                session["api_token"] = fallback_api_token
+            api_token = session["api_token"]
 
-        with open("incidents-{date}.html".format(date=since_datetime.strftime('%m-%d-%Y')), 'w') as f:
-            f.write(thin_df.to_html(index=False, escape=False))
-        # thin_df.to_excel("incidents-{date}.xlsx".format(date=since_datetime.strftime('%m-%d-%Y')), index=False)
-    except HTTPError as e:
-        print(e)
-        html += "<p>{error}</p>".format(error=e)
+            headers = {
+                "Accept": "application/vnd.pagerduty+json;version=2",
+                "Authorization": "Bearer " + api_token,
+            }
+            incident_res = requests.get(incident_url, headers=headers)
+            incident_res.raise_for_status()
+            incident_body = incident_res.json()
+            date_str = since_datetime.strftime('%m-%d-%Y')
+            html+= "<div>\
+                 <div>date:{date}</div>\
+                <div>total:{total}</div>\
+                <div>more:{more}</div>\
+                <div>offset:{offset}</div>\
+                <div>limit:{limit}</div>\
+                    </div>".format(
+                total=incident_body["total"],
+                more=incident_body["more"],
+                offset=incident_body["offset"],
+                limit=incident_body["limit"],
+                date=date_str,
+                )
+
+            # download the incidents as excel file
+            incidents_df = pd.json_normalize(incident_body["incidents"])
+            # transform
+            selected_columns = ["created_at", "title", "html_url", "status", "updated_at",  "resolved_at", "service.summary", "last_status_change_by.summary"]
+            for col_name in include_names:
+                if col_name in incidents_df.columns:
+                    selected_columns.append(col_name)
+            
+            thin_df = incidents_df[selected_columns]
+            thin_df['title'] = '<a href=' + thin_df['html_url'] + '><div>' + thin_df['title'] + '</div></a>'
+            thin_df['html_url'] = '<a href=' + thin_df['html_url'] + '><div>' + thin_df['html_url'] + '</div></a>'
+
+            with open("incidents-{date}.html".format(date=date_str), 'w') as f:
+                f.write(thin_df.to_html(index=False, escape=False))
+            # thin_df.to_excel("incidents-{date}.xlsx".format(date=since_datetime.strftime('%m-%d-%Y')), index=False)
+        except HTTPError as e:
+            print(e)
+            html += "<p>{error}</p>".format(error=e)
     return html
 
 
